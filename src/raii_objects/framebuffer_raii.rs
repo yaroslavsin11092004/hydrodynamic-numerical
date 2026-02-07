@@ -1,12 +1,13 @@
-use ash::{Device, vk};
+use ash::{vk};
 use std::sync::Arc;
-pub struct VulkanFramebuffer {
-    framebuffer: vk::Framebuffer,
 
-    device: Arc<Device>
+use crate::engine::ripple_view_context::RippleViewCore;
+pub struct VulkanFramebuffer {
+    core: Arc<RippleViewCore>,
+    framebuffer: vk::Framebuffer,
 }
 impl VulkanFramebuffer {
-    pub fn new(device: Arc<Device>, render_pass: vk::RenderPass, width: u32, height: u32, image_view: vk::ImageView) -> Result<Self, String> {
+    pub fn new(core: Arc<RippleViewCore>, render_pass: vk::RenderPass, width: u32, height: u32, image_view: vk::ImageView) -> Result<Self, String> {
         let framebuffer_info = vk::FramebufferCreateInfo {
             s_type: vk::StructureType::FRAMEBUFFER_CREATE_INFO,
             render_pass: render_pass,
@@ -18,9 +19,9 @@ impl VulkanFramebuffer {
             ..Default::default()
         };
         let framebuffer = unsafe {
-            device.create_framebuffer(&framebuffer_info, None).expect("Failed to create framebuffer!")
+            core.device.create_framebuffer(&framebuffer_info, None).expect("Failed to create framebuffer!")
         };
-        Ok(Self{framebuffer, device})
+        Ok(Self{framebuffer, core})
     }
     pub fn framebuffer(&self) -> vk::Framebuffer {
         self.framebuffer
@@ -29,7 +30,7 @@ impl VulkanFramebuffer {
 impl Drop for VulkanFramebuffer {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_framebuffer(self.framebuffer, None)
+            self.core.device.destroy_framebuffer(self.framebuffer, None);
         }
     }
 }

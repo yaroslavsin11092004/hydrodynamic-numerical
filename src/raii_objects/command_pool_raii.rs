@@ -2,10 +2,10 @@ use ash::{vk, Device, Instance};
 use std::sync::Arc;
 pub struct VulkanCommandPool {
     command_pool: vk::CommandPool,
-    device: Arc<Device>
+    device: Arc<Option<Device>>
 }
 impl VulkanCommandPool {
-    pub fn new(device: Arc<Device>,instance: &Instance, physical_device: vk::PhysicalDevice) -> Result<Self, String> {
+    pub fn new(device: Arc<Option<Device>>,instance: &Instance, physical_device: vk::PhysicalDevice) -> Result<Self, String> {
         let mut index : u32 = 0;
         let queue_families = unsafe {
             instance.get_physical_device_queue_family_properties(physical_device)
@@ -22,7 +22,7 @@ impl VulkanCommandPool {
             ..Default::default()
         };
         let command_pool = unsafe {
-            device.create_command_pool(&pool_info, None).expect("Failed to create command pool!")
+            device.as_ref().as_ref().unwrap().create_command_pool(&pool_info, None).expect("Failed to create command pool!")
         };
         Ok(Self { command_pool, device })
     }
@@ -33,7 +33,8 @@ impl VulkanCommandPool {
 impl Drop for VulkanCommandPool {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_command_pool(self.command_pool, None)
+                                                println!("ПИПИП");
+            self.device.as_ref().as_ref().unwrap().destroy_command_pool(self.command_pool, None);
         }
     }
 }

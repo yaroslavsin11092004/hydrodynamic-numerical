@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 pub struct VulkanRenderPass {
     render_pass: vk::RenderPass,
-    device: Arc<Device>
+    device: Arc<Option<Device>>
 }
 
 impl VulkanRenderPass {
-    pub fn new(device: Arc<Device>, format: vk::Format) -> Result<Self, String> {
+    pub fn new(device: Arc<Option<Device>>, format: vk::Format) -> Result<Self, String> {
         let color_attachment = vk::AttachmentDescription {
             format: format,
             samples: vk::SampleCountFlags::TYPE_1,
@@ -49,18 +49,27 @@ impl VulkanRenderPass {
             ..Default::default()
         };
         let render_pass = unsafe {
-            device.create_render_pass(&render_pass_info, None).expect("Failed to create render pass!")
+            device.as_ref().as_ref().unwrap().create_render_pass(&render_pass_info, None).expect("Failed to create render pass!")
         };
         Ok(Self {render_pass, device })
     }
     pub fn render_pass(&self) -> vk::RenderPass {
         self.render_pass
     }
+    fn cleanup(&mut self) {
+        unsafe {
+            self.device.as_ref().as_ref().unwrap().destroy_render_pass(self.render_pass(), None)
+        };
+    }
+    pub fn recreate(&mut self, device: Arc<Option<Device>>, format: vk::Format) -> Result<Self, String> {
+        self.cleanup();
+        VulkanRenderPass::new(device, format)
+    }
 }
 impl Drop for VulkanRenderPass {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_render_pass(self.render_pass, None)
+            self.device.as_ref().as_ref().unwrap().destroy_render_pass(self.render_pass, None)
         }
     }
 }

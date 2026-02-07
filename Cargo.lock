@@ -9,6 +9,7 @@ dependencies = [
  "ash",
  "ash-window",
  "glfw",
+ "log",
  "raw-window-handle",
 ]
 

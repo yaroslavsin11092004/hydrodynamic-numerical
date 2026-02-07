@@ -3,8 +3,8 @@ use glfw::{PWindow};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 pub struct VulkanSurface {
-    surface : vk::SurfaceKHR,
-    loader : ash::khr::surface::Instance
+    loader : ash::khr::surface::Instance,
+    surface : vk::SurfaceKHR
 }
 impl VulkanSurface {
     pub fn new(window: &PWindow, instance: &Instance, entry : &Entry) -> Result<Self, String> {
@@ -15,8 +15,8 @@ impl VulkanSurface {
         let loader = ash::khr::surface::Instance::new(entry, instance);
         Ok(Self { surface, loader })
     }
-    pub fn surface(&self) -> &vk::SurfaceKHR {
-        &self.surface
+    pub fn surface(&self) -> vk::SurfaceKHR {
+        self.surface
     }
     pub fn loader(&self) -> &ash::khr::surface::Instance {
         &self.loader

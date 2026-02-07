@@ -3,10 +3,10 @@ use std::sync::Arc;
 pub struct VulkanBuffer {
     buffer : vk::Buffer,
     memory : vk::DeviceMemory,
-    device : Arc<Device>
+    device : Arc<Option<Device>>
 }
 impl VulkanBuffer {
-    pub fn new(device : Arc<Device>,instance: &Instance, physical_device: vk::PhysicalDevice,  size : vk::DeviceSize, usage : vk::BufferUsageFlags, properties : vk::MemoryPropertyFlags) -> Result<Self, String> {
+    pub fn new(device : Arc<Option<Device>>,instance: &Instance, physical_device: vk::PhysicalDevice,  size : vk::DeviceSize, usage : vk::BufferUsageFlags, properties : vk::MemoryPropertyFlags) -> Result<Self, String> {
         let buffer_info = vk::BufferCreateInfo {
             s_type: vk::StructureType::BUFFER_CREATE_INFO,
             size: size,
@@ -15,10 +15,10 @@ impl VulkanBuffer {
             ..Default::default()
         };
         let  buffer = unsafe { 
-            device.create_buffer(&buffer_info, None).unwrap()
+            device.as_ref().as_ref().unwrap().create_buffer(&buffer_info, None).unwrap()
         };
         let mem_req = unsafe { 
-            device.get_buffer_memory_requirements(buffer)
+            device.as_ref().as_ref().unwrap().get_buffer_memory_requirements(buffer)
         };
         let mem_prop = unsafe {
             instance.get_physical_device_memory_properties(physical_device)
@@ -37,10 +37,10 @@ impl VulkanBuffer {
             ..Default::default()
         };
         let memory = unsafe {
-            device.allocate_memory(&memory_allocate_info, None).expect("Failed to allocate buffer memory!")
+            device.as_ref().as_ref().unwrap().allocate_memory(&memory_allocate_info, None).expect("Failed to allocate buffer memory!")
         };
         unsafe { 
-            device.bind_buffer_memory(buffer, memory, 0).expect("Failed to bind buffer memory!")
+            device.as_ref().as_ref().unwrap().bind_buffer_memory(buffer, memory, 0).expect("Failed to bind buffer memory!")
         };
         Ok(Self { buffer, memory, device })
     }
@@ -62,7 +62,7 @@ impl BufferMethods for VulkanBuffer {
             ..Default::default()
         };
         let command_buffer = unsafe { 
-            self.device.allocate_command_buffers(&command_buffer_alloc_info).expect("Failed to allocate command buffer for copy buffers!")
+            self.device.as_ref().as_ref().unwrap().allocate_command_buffers(&command_buffer_alloc_info).expect("Failed to allocate command buffer for copy buffers!")
         };
         let begin_info = vk::CommandBufferBeginInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
@@ -70,7 +70,7 @@ impl BufferMethods for VulkanBuffer {
             ..Default::default()
         };
         unsafe {
-            self.device.begin_command_buffer(command_buffer[0], &begin_info).expect("Failed to begin copy command buffer!")
+            self.device.as_ref().as_ref().unwrap().begin_command_buffer(command_buffer[0], &begin_info).expect("Failed to begin copy command buffer!")
         };
         let copy_region = vk::BufferCopy {
             src_offset: 0,
@@ -78,8 +78,8 @@ impl BufferMethods for VulkanBuffer {
             size: size
         };
         unsafe {
-            self.device.cmd_copy_buffer(command_buffer[0], *self.buffer(), dst_buffer, &[copy_region]);
-            self.device.end_command_buffer(command_buffer[0]).expect("Failed to end copy command buffer!")
+            self.device.as_ref().as_ref().unwrap().cmd_copy_buffer(command_buffer[0], *self.buffer(), dst_buffer, &[copy_region]);
+            self.device.as_ref().as_ref().unwrap().end_command_buffer(command_buffer[0]).expect("Failed to end copy command buffer!")
         };
         let submit_info = vk::SubmitInfo {
             s_type: vk::StructureType::SUBMIT_INFO,
@@ -92,22 +92,22 @@ impl BufferMethods for VulkanBuffer {
             ..Default::default()
         };
         let fence = unsafe {
-            self.device.create_fence(&fence_info, None).unwrap()
+            self.device.as_ref().as_ref().unwrap().create_fence(&fence_info, None).unwrap()
         };
         unsafe {
-            self.device.queue_submit(queue, &[submit_info], fence).expect("Failed to submit copy buffer!");
-            self.device.wait_for_fences(&[fence], true, u64::MAX).expect("Failed to wait copying buffer!");
-            self.device.reset_fences(&[fence]).unwrap();
-            self.device.free_command_buffers(command_pool, &command_buffer);
-            self.device.destroy_fence(fence, None);
+            self.device.as_ref().as_ref().unwrap().queue_submit(queue, &[submit_info], fence).expect("Failed to submit copy buffer!");
+            self.device.as_ref().as_ref().unwrap().wait_for_fences(&[fence], true, u64::MAX).expect("Failed to wait copying buffer!");
+            self.device.as_ref().as_ref().unwrap().reset_fences(&[fence]).unwrap();
+            self.device.as_ref().as_ref().unwrap().free_command_buffers(command_pool, &command_buffer);
+            self.device.as_ref().as_ref().unwrap().destroy_fence(fence, None);
         };
     }
 }
 impl Drop for VulkanBuffer {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_buffer(self.buffer, None);
-            self.device.free_memory(self.memory, None)
+            self.device.as_ref().as_ref().unwrap().destroy_buffer(self.buffer, None);
+            self.device.as_ref().as_ref().unwrap().free_memory(self.memory, None)
         }
     }
 }
