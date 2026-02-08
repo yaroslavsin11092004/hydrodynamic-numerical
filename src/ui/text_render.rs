@@ -560,7 +560,7 @@ impl RippleText {
             self.base.core.device.destroy_shader_module(frag_shader, None)
         };
     }
-    pub fn render_text(&mut self, text_info: &mut [RenderTextInfo]) {
+    pub fn render_text(&mut self, text_info: &[RenderTextInfo]) {
         let alloc_info = vk::CommandBufferAllocateInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
             command_pool: self.base.state.read().unwrap().command_pool,
@@ -616,12 +616,17 @@ impl RippleText {
             self.base.core.device.end_command_buffer(self.secondary_command_buffer).expect("Failed to end record text command buffer!");
         };
     }
+    pub fn re_render(&mut self, text_info: &[RenderTextInfo]) {
+        unsafe {
+            self.base.core.device.reset_command_buffer(self.secondary_command_buffer, vk::CommandBufferResetFlags::empty())
+                .expect("Failed to reset text command buffer!");
+        };
+            self.render_text(text_info);
+    }
     pub fn get_secondary_buffer(&self) -> vk::CommandBuffer {
         self.secondary_command_buffer
     }
-}
-impl Drop for RippleText {
-    fn drop(&mut self) {
+    pub fn free(&self) {
         unsafe {
             self.base.core.device.destroy_descriptor_set_layout(self.descriptor_layout, None);
             self.atlases.iter().for_each(|atlas| {
@@ -636,7 +641,7 @@ impl Drop for RippleText {
             self.base.core.device.destroy_pipeline_layout(self.pipeline_layout, None);
             self.base.core.device.destroy_pipeline(self.pipeline, None);
             self.base.core.device.destroy_buffer(self.vertex_buffer, None);
-            self.base.core.device.free_memory(self.vertex_memory, None)
+            self.base.core.device.free_memory(self.vertex_memory, None);
         }
     }
 }

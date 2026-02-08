@@ -1,8 +1,8 @@
 use crate::{engine::ripple_view_context, raii_objects::{swapchain_raii, framebuffer_raii}};
 use crate::ui::{text_render};
-use std::{mem::swap, sync::{Arc, RwLock}};
+use std::{sync::{Arc, RwLock}};
 use glam;
-use ash::vk::{self, PipelineColorBlendStateCreateInfo};
+use ash::vk;
 use glfw::{Glfw, PWindow, fail_on_errors, GlfwReceiver, WindowEvent};
 use log::warn;
 pub struct RippleView {
@@ -26,11 +26,11 @@ pub struct RippleView {
 impl RippleView {
     pub fn new(screen_width: u32, screen_height: u32, font_size: u32) -> Result<Self, String> {
         let mut glfw = glfw::init(fail_on_errors!()).unwrap();
-        glfw.window_hint(glfw::WindowHint::Resizable(true));
+        glfw.window_hint(glfw::WindowHint::Resizable(false));
         glfw.window_hint(glfw::WindowHint::ClientApi(glfw::ClientApiHint::NoApi));
         let (mut window, events) = glfw.create_window(screen_width, screen_height, "RippleView Engine", glfw::WindowMode::Windowed).expect("Failed to create window!");
         window.set_key_polling(true);
-        window.set_framebuffer_size_polling(true);
+        window.set_framebuffer_size_polling(false);
         let context = ripple_view_context::RippleViewContext::new(&glfw, &window, screen_width, screen_height, font_size);
         let swapchain = swapchain_raii::VulkanSwapchain::new(context.core.clone(), &window).unwrap();
         context.state.write().unwrap().create_render_pass(&context.core.device, swapchain.swapchain_format());
@@ -59,10 +59,8 @@ impl RippleView {
         ripple_text.write().unwrap().create_descriptors();
         ripple_text.write().unwrap().create_pipeline("/home/yaroslavsinyakov/source/rust/Progonka/src/shaders/text_shader.vert.spv", 
             "/home/yaroslavsinyakov/source/rust/Progonka/src/shaders/text_shader.frag.spv");
-        let t = String::from("Hello World!");
-        let t1 = String::from("Алгоритм прогонки");
         let label = text_render::RenderTextInfo {
-            text: t,
+            text: String::from("Hello world!"),
             atlas_id: 0,
             x: 10.0,
             y: 10.0,
@@ -70,7 +68,7 @@ impl RippleView {
             color: glam::Vec4::new(1.0, 1.0, 0.0, 1.0)
         };
         let label1 = text_render::RenderTextInfo {
-            text: t1,
+            text: String::from("Алгоритм прогонки"),
             atlas_id: 1,
             x: 10.0,
             y: 60.0,
@@ -81,7 +79,7 @@ impl RippleView {
             text: String::from("This is Win!"),
             atlas_id: 2,
             x: 10.0,
-            y: 110.0,
+            y: 500.0,
             scale: 1.0,
             color: glam::Vec4::new(0.5, 1.0, 0.3, 1.0)
         };
@@ -91,63 +89,6 @@ impl RippleView {
 
         let command_buffers = unsafe {
             context.core.device.allocate_command_buffers(&command_buffer_info).expect("Failed to allocate command buffer for swapchain!")
-        };
-        let clear_colors = &[
-            vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 1.0],
-                }
-            }
-        ];
-        for i in 0..command_buffers.len() {
-            let begin_info = vk::CommandBufferBeginInfo {
-                s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
-                flags: vk::CommandBufferUsageFlags::SIMULTANEOUS_USE,
-                ..Default::default()
-            };
-            unsafe {
-                context.core.device.begin_command_buffer(command_buffers[i], &begin_info).expect("Failed to begin command buffer!")
-            };
-
-            let render_pass_begin_info = vk::RenderPassBeginInfo {
-                s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
-                render_pass: context.state.read().unwrap().screen_render_pass,
-                framebuffer: swapchain_framebuffers[i].framebuffer(),
-                render_area: vk::Rect2D {
-                    offset: vk::Offset2D {
-                        x: 0,
-                        y: 0
-                    },
-                    extent: swapchain.swapchain_extent(),
-                },
-                clear_value_count: 1,
-                p_clear_values: clear_colors.as_ptr(),
-                ..Default::default()
-            };
-            unsafe {
-                context.core.device.cmd_begin_render_pass(command_buffers[i], &render_pass_begin_info, vk::SubpassContents::SECONDARY_COMMAND_BUFFERS);
-                let viewport = vk::Viewport {
-                    x: 0.0,
-                    y: 0.0,
-                    width: swapchain.swapchain_extent().width as f32,
-                    height: swapchain.swapchain_extent().height as f32,
-                    ..Default::default()
-                };
-                let scissor = vk::Rect2D {
-                    offset: vk::Offset2D {
-                        x: 0,
-                        y: 0 
-                    },
-                    extent: swapchain.swapchain_extent()
-                };
-                context.core.device.cmd_set_scissor(command_buffers[i], 0, &[scissor]);
-                context.core.device.cmd_set_viewport(command_buffers[i], 0, &[viewport]);
-                context.core.device.cmd_execute_commands(command_buffers[i], &[ripple_text.read().unwrap().get_secondary_buffer()]);
-            };
-            unsafe {
-                context.core.device.cmd_end_render_pass(command_buffers[i]);
-                context.core.device.end_command_buffer(command_buffers[i]).expect("Failed to end command buffer!");
-            };
         };
         let mut image_available_semaphore: Vec<vk::Semaphore> = vec![vk::Semaphore::null(); 2];
         let mut render_finish_semaphore: Vec<vk::Semaphore> = vec![vk::Semaphore::null();2];
@@ -175,11 +116,63 @@ impl RippleView {
         };
         Ok(Self { context, window,events, glfw, swapchain, swapchain_framebuffers, command_buffers, image_available_semaphore, render_finish_semaphore, in_flight_fence, images_in_flight, current_frame: 0, framebuffer_resize: false, ripple_text })
     }
+    fn update_image_command_buffer(&self, index: usize,  secondary_buffers: &[vk::CommandBuffer]) {
+        let clear_colors = &[
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 1.0],
+                }
+            }
+        ];
+        let begin_info = vk::CommandBufferBeginInfo {
+            s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
+            flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+            ..Default::default()
+        };
+        unsafe {
+            self.context.core.device.reset_command_buffer(self.command_buffers[index], vk::CommandBufferResetFlags::empty()).expect("Failed to reset command buffer!");
+            self.context.core.device.begin_command_buffer(self.command_buffers[index], &begin_info).expect("Failed to begin command buffer!")
+        };
+        let render_pass_begin_info = vk::RenderPassBeginInfo {
+            s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
+            render_pass: self.context.state.read().unwrap().screen_render_pass,
+            framebuffer: self.swapchain_framebuffers[index].framebuffer(),
+            render_area: vk::Rect2D {
+                offset: vk::Offset2D {
+                    x: 0,
+                    y: 0
+                },
+                extent: self.swapchain.swapchain_extent()
+            },
+            clear_value_count: 1,
+            p_clear_values: clear_colors.as_ptr(),
+            ..Default::default()
+        };
+        unsafe {
+            self.context.core.device.cmd_begin_render_pass(self.command_buffers[index], &render_pass_begin_info, vk::SubpassContents::SECONDARY_COMMAND_BUFFERS);
+            let viewport = vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: self.swapchain.swapchain_extent().width as f32,
+                height: self.swapchain.swapchain_extent().height as f32,
+                ..Default::default()
+            };
+            let scissor = vk::Rect2D {
+                offset: vk::Offset2D {
+                    x: 0,
+                    y: 0 
+                },
+                extent: self.swapchain.swapchain_extent()
+            };
+            self.context.core.device.cmd_set_viewport(self.command_buffers[index], 0, &[viewport]);
+            self.context.core.device.cmd_set_scissor(self.command_buffers[index], 0, &[scissor]);
+            self.context.core.device.cmd_execute_commands(self.command_buffers[index], secondary_buffers);
+            self.context.core.device.cmd_end_render_pass(self.command_buffers[index]);
+            self.context.core.device.end_command_buffer(self.command_buffers[index]).expect("Failed to end command_buffers")
+        };
+    }
     fn cleanup_link_swapchain_resuoures(&mut self) {
         self.swapchain_framebuffers.clear();
-        unsafe {
-            self.context.core.device.free_command_buffers(self.context.state.read().unwrap().command_pool, &self.command_buffers);
-        };
     }
     fn recreate_link_framebuffer_resourses(&mut self) {
          unsafe {
@@ -191,55 +184,34 @@ impl RippleView {
         for i in 0..self.swapchain.swapchain_images().len() {
             self.swapchain_framebuffers.push(framebuffer_raii::VulkanFramebuffer::new(self.context.core.clone(), self.context.state.read().unwrap().screen_render_pass, self.swapchain.swapchain_extent().width, self.swapchain.swapchain_extent().height, self.swapchain.swapchain_image_views()[i]).expect("Failed to create framebuffer!"));
         };
-        let command_buffer_info = vk::CommandBufferAllocateInfo {
-            s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
-            level: vk::CommandBufferLevel::PRIMARY,
-            command_buffer_count: self.swapchain.swapchain_images().len() as u32,
-            ..Default::default()
+        self.context.state.write().unwrap().screen_width = self.swapchain.swapchain_extent().width;
+        self.context.state.write().unwrap().screen_height = self.swapchain.swapchain_extent().height;
+                let label = text_render::RenderTextInfo {
+            text: String::from("Hello world!"),
+            atlas_id: 0,
+            x: 10.0,
+            y: 10.0,
+            scale: 1.0,
+            color: glam::Vec4::new(1.0, 1.0, 0.0, 1.0)
         };
-        self.command_buffers = unsafe {
-            self.context.core.device.allocate_command_buffers(&command_buffer_info).expect("Failed to allocate command buffers for swapchain!")
+        let label1 = text_render::RenderTextInfo {
+            text: String::from("Алгоритм прогонки"),
+            atlas_id: 1,
+            x: 10.0,
+            y: 60.0,
+            scale: 1.0,
+            color: glam::Vec4::new(1.0, 0.2, 0.0, 1.0)
         };
-        let clear_colors = &[
-            vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0,0.0,0.0,1.0]
-                }
-            }
-        ];
-        for i in 0..self.command_buffers.len() {
-            let begin_info = vk::CommandBufferBeginInfo {
-                s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
-                flags: vk::CommandBufferUsageFlags::SIMULTANEOUS_USE,
-                ..Default::default()
-            };
-            unsafe {
-                self.context.core.device.begin_command_buffer(self.command_buffers[i], &begin_info).expect("Failed to begin swapchain command buffer!")
-            };
-            let render_pass_begin_info = vk::RenderPassBeginInfo{
-                s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
-                render_pass: self.context.state.read().unwrap().screen_render_pass,
-                framebuffer: self.swapchain_framebuffers[i].framebuffer(),
-                render_area: vk::Rect2D {
-                    offset: vk::Offset2D {
-                        x: 0,
-                        y: 0 
-                    },
-                    extent: self.swapchain.swapchain_extent()
-                },
-                clear_value_count: 1,
-                p_clear_values: clear_colors.as_ptr(),
-                ..Default::default()
-            };
-            unsafe {
-                self.context.core.device.cmd_begin_render_pass(self.command_buffers[i], &render_pass_begin_info, vk::SubpassContents::SECONDARY_COMMAND_BUFFERS);
-                self.context.core.device.cmd_execute_commands(self.command_buffers[i], &[self.ripple_text.read().unwrap().get_secondary_buffer()]);
-            };
-            unsafe {
-                self.context.core.device.cmd_end_render_pass(self.command_buffers[i]);
-                self.context.core.device.end_command_buffer(self.command_buffers[i]).expect("Failed to end swapchain command buffers!");
-            };
+        let label2 = text_render::RenderTextInfo {
+            text: String::from("This is Win!"),
+            atlas_id: 2,
+            x: 1000.0,
+            y: 300.0,
+            scale: 1.0,
+            color: glam::Vec4::new(0.5, 1.0, 0.3, 1.0)
         };
+        self.ripple_text.write().unwrap().create_projection();
+        self.ripple_text.write().unwrap().re_render(&[label, label1, label2]);
     }
     pub fn main_loop(&mut self) {
         while !self.window.should_close() {
@@ -247,11 +219,6 @@ impl RippleView {
             let event_to_process: Vec<_> = glfw::flush_messages(&self.events).collect();
             for (_,event) in event_to_process {
                 match event {
-                    glfw::WindowEvent::FramebufferSize(w, h) => {
-                        if w > 0 && h > 0 {
-                            self.framebuffer_resize = true;
-                        }
-                    },
                      glfw::WindowEvent::Key(glfw::Key::Escape, _, glfw::Action::Press, _) => {
                         self.window.set_should_close(true);
                      },
@@ -300,6 +267,7 @@ impl RippleView {
         if self.images_in_flight[image_index as usize] != vk::Fence::null() {
             unsafe { self.context.core.device.wait_for_fences(&[self.images_in_flight[image_index as usize]], true, u64::MAX).unwrap() }
         };
+        self.update_image_command_buffer(image_index as usize, &[self.ripple_text.read().unwrap().get_secondary_buffer()]);
         self.images_in_flight[image_index as usize] = self.in_flight_fence[self.current_frame];
         let submit_info = vk::SubmitInfo {
             s_type: vk::StructureType::SUBMIT_INFO,
@@ -353,6 +321,7 @@ impl Drop for RippleView {
     fn drop(&mut self) {
         unsafe {
             self.context.core.device.device_wait_idle().ok();
+            self.ripple_text.read().unwrap().free();
             self.context.core.device.free_command_buffers(self.context.state.read().unwrap().command_pool, &self.command_buffers);
             for i in 0..self.render_finish_semaphore.len() {
                 self.context.core.device.destroy_semaphore(self.render_finish_semaphore[i], None)
@@ -364,6 +333,12 @@ impl Drop for RippleView {
                 self.context.core.device.destroy_fence(self.in_flight_fence[i], None)
             };
             self.swapchain_framebuffers.clear();
+            self.swapchain_framebuffers.iter_mut().for_each(|f| {
+                f.free();
+            });
+            self.swapchain.cleanup();
+            self.context.core.surface.free();
+            self.context.free();
         };
     }
 }

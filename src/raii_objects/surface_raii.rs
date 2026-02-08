@@ -21,11 +21,9 @@ impl VulkanSurface {
     pub fn loader(&self) -> &ash::khr::surface::Instance {
         &self.loader
     }
-}
-impl Drop for VulkanSurface {
-    fn drop(&mut self) {
+    pub fn free(&self) {
         unsafe {
-            self.loader.destroy_surface(self.surface, None);
+            self.loader().destroy_surface(self.surface, None);
         }
     }
 }

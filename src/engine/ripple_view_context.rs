@@ -45,16 +45,13 @@ impl RippleViewCore {
         let logical_device_and_queues = hardware_functions::create_logical_device(&instance, surface.loader(), surface.surface(), physical_device);
         Arc::new(Self { instance, device: logical_device_and_queues.0, physical_device, entry, present_queue: logical_device_and_queues.2, surface, graphics_queue: logical_device_and_queues.1 })
     }
-}
-impl Drop for RippleViewCore {
-    fn drop(&mut self) {
+    pub fn free(&self) {
         unsafe {
             self.device.destroy_device(None);
             self.instance.destroy_instance(None)
         };
     }
 }
-
 pub struct RippleViewState {
     pub(crate) screen_width: u32,
     pub(crate) screen_height: u32,
@@ -138,12 +135,11 @@ impl RippleViewContext {
         let state = RippleViewState::new(screen_width, screen_height, font_size);
         Self { core, state }
     }
-}
-impl Drop for RippleViewContext {
-    fn drop(&mut self) {
+    pub fn free(&mut self) {
         unsafe {
             self.core.device.destroy_command_pool(self.state.read().unwrap().command_pool, None);
             self.core.device.destroy_render_pass(self.state.read().unwrap().screen_render_pass, None)
         };
+        self.core.free();
     }
 }

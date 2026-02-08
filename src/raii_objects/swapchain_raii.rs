@@ -270,8 +270,3 @@ impl VulkanSwapchain {
         self.swapchain_extent
     }
 }
-impl Drop for VulkanSwapchain {
-    fn drop(&mut self) {
-        self.cleanup();
-    }
-}

@@ -26,9 +26,7 @@ impl VulkanFramebuffer {
     pub fn framebuffer(&self) -> vk::Framebuffer {
         self.framebuffer
     }
-}
-impl Drop for VulkanFramebuffer {
-    fn drop(&mut self) {
+    pub fn free(&mut self) {
         unsafe {
             self.core.device.destroy_framebuffer(self.framebuffer, None);
         }
