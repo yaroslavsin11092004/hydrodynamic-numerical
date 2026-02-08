@@ -1,5 +1,8 @@
 use crate::{engine::ripple_view_context, raii_objects::{swapchain_raii, framebuffer_raii}};
-use ash::vk;
+use crate::ui::{text_render};
+use std::{mem::swap, sync::{Arc, RwLock}};
+use glam;
+use ash::vk::{self, PipelineColorBlendStateCreateInfo};
 use glfw::{Glfw, PWindow, fail_on_errors, GlfwReceiver, WindowEvent};
 use log::warn;
 pub struct RippleView {
@@ -15,7 +18,9 @@ pub struct RippleView {
     image_available_semaphore: Vec<vk::Semaphore>,
     render_finish_semaphore: Vec<vk::Semaphore>,
     in_flight_fence: Vec<vk::Fence>,
-    images_in_flight: Vec<vk::Fence>
+    images_in_flight: Vec<vk::Fence>,
+
+    ripple_text: Arc<RwLock<text_render::RippleText>>
 }
 
 impl RippleView {
@@ -34,6 +39,8 @@ impl RippleView {
             swapchain_framebuffers.push(framebuffer_raii::VulkanFramebuffer::new(context.core.clone(), context.state.read().unwrap().screen_render_pass, 
                 swapchain.swapchain_extent().width, swapchain.swapchain_extent().height, swapchain.swapchain_image_views()[i]).unwrap());
         };
+        context.state.write().unwrap().screen_width = swapchain.swapchain_extent().width;
+        context.state.write().unwrap().screen_height = swapchain.swapchain_extent().height;
         context.state.write().unwrap().create_command_pool(&context.core.device, &context.core.instance, context.core.physical_device, context.core.surface.loader(), context.core.surface.surface());
         let command_buffer_info = vk::CommandBufferAllocateInfo {
             s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
@@ -42,6 +49,46 @@ impl RippleView {
             command_pool: context.state.read().unwrap().command_pool,
             ..Default::default()
         };
+        ////////////////СВИНЬЯ В ЗАГОНЕ НЕ ТРОГАТЬ!!!!/////////////////////////////////////////////
+        //                                                                                      //
+        let ripple_text = text_render::RippleText::new(context.core.clone(), context.state.clone());
+        ripple_text.write().unwrap().create_projection();
+        ripple_text.write().unwrap().create_atlas("/home/yaroslavsinyakov/source/rust/Progonka/src/assets/fonts/Roboto/static/Roboto-Italic.ttf", font_size, 512,512);
+        ripple_text.write().unwrap().create_atlas("/home/yaroslavsinyakov/source/rust/Progonka/src/assets/fonts/Roboto/static/Roboto-Bold.ttf", 32, 512,512);
+        ripple_text.write().unwrap().create_atlas("/home/yaroslavsinyakov/source/rust/Progonka/src/assets/fonts/Roboto/static/Roboto-Thin.ttf", 28, 512, 512);
+        ripple_text.write().unwrap().create_descriptors();
+        ripple_text.write().unwrap().create_pipeline("/home/yaroslavsinyakov/source/rust/Progonka/src/shaders/text_shader.vert.spv", 
+            "/home/yaroslavsinyakov/source/rust/Progonka/src/shaders/text_shader.frag.spv");
+        let t = String::from("Hello World!");
+        let t1 = String::from("Алгоритм прогонки");
+        let label = text_render::RenderTextInfo {
+            text: t,
+            atlas_id: 0,
+            x: 10.0,
+            y: 10.0,
+            scale: 1.0,
+            color: glam::Vec4::new(1.0, 1.0, 0.0, 1.0)
+        };
+        let label1 = text_render::RenderTextInfo {
+            text: t1,
+            atlas_id: 1,
+            x: 10.0,
+            y: 60.0,
+            scale: 1.0,
+            color: glam::Vec4::new(1.0, 0.2, 0.0, 1.0)
+        };
+        let label2 = text_render::RenderTextInfo {
+            text: String::from("This is Win!"),
+            atlas_id: 2,
+            x: 10.0,
+            y: 110.0,
+            scale: 1.0,
+            color: glam::Vec4::new(0.5, 1.0, 0.3, 1.0)
+        };
+        ripple_text.write().unwrap().render_text(&mut [label, label1, label2]);
+        //                                                                                    //
+        ///////////////////////////////////////////////////////////////////////////////////////
+
         let command_buffers = unsafe {
             context.core.device.allocate_command_buffers(&command_buffer_info).expect("Failed to allocate command buffer for swapchain!")
         };
@@ -55,6 +102,7 @@ impl RippleView {
         for i in 0..command_buffers.len() {
             let begin_info = vk::CommandBufferBeginInfo {
                 s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
+                flags: vk::CommandBufferUsageFlags::SIMULTANEOUS_USE,
                 ..Default::default()
             };
             unsafe {
@@ -77,25 +125,26 @@ impl RippleView {
                 ..Default::default()
             };
             unsafe {
-                context.core.device.cmd_begin_render_pass(command_buffers[i], &render_pass_begin_info, vk::SubpassContents::INLINE)
-            };
-            let viewport = vk::Viewport {
-                x: 0.0,
-                y: 0.0,
-                width: swapchain.swapchain_extent().width as f32,
-                height: swapchain.swapchain_extent().height as f32,
-                ..Default::default()
-            };
-            let scissor = vk::Rect2D {
-                offset: vk::Offset2D {
-                    x: 0,
-                    y: 0 
-                },
-                extent: swapchain.swapchain_extent()
+                context.core.device.cmd_begin_render_pass(command_buffers[i], &render_pass_begin_info, vk::SubpassContents::SECONDARY_COMMAND_BUFFERS);
+                let viewport = vk::Viewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: swapchain.swapchain_extent().width as f32,
+                    height: swapchain.swapchain_extent().height as f32,
+                    ..Default::default()
+                };
+                let scissor = vk::Rect2D {
+                    offset: vk::Offset2D {
+                        x: 0,
+                        y: 0 
+                    },
+                    extent: swapchain.swapchain_extent()
+                };
+                context.core.device.cmd_set_scissor(command_buffers[i], 0, &[scissor]);
+                context.core.device.cmd_set_viewport(command_buffers[i], 0, &[viewport]);
+                context.core.device.cmd_execute_commands(command_buffers[i], &[ripple_text.read().unwrap().get_secondary_buffer()]);
             };
             unsafe {
-                context.core.device.cmd_set_viewport(command_buffers[i], 0, &[viewport]);
-                context.core.device.cmd_set_scissor(command_buffers[i], 0, &[scissor]);
                 context.core.device.cmd_end_render_pass(command_buffers[i]);
                 context.core.device.end_command_buffer(command_buffers[i]).expect("Failed to end command buffer!");
             };
@@ -124,7 +173,7 @@ impl RippleView {
                 context.core.device.create_fence(&fence_info, None).expect("Failed to create in flight fence!")
             };
         };
-        Ok(Self { context, window,events, glfw, swapchain, swapchain_framebuffers, command_buffers, image_available_semaphore, render_finish_semaphore, in_flight_fence, images_in_flight, current_frame: 0, framebuffer_resize: false })
+        Ok(Self { context, window,events, glfw, swapchain, swapchain_framebuffers, command_buffers, image_available_semaphore, render_finish_semaphore, in_flight_fence, images_in_flight, current_frame: 0, framebuffer_resize: false, ripple_text })
     }
     fn cleanup_link_swapchain_resuoures(&mut self) {
         self.swapchain_framebuffers.clear();
@@ -161,6 +210,7 @@ impl RippleView {
         for i in 0..self.command_buffers.len() {
             let begin_info = vk::CommandBufferBeginInfo {
                 s_type: vk::StructureType::COMMAND_BUFFER_BEGIN_INFO,
+                flags: vk::CommandBufferUsageFlags::SIMULTANEOUS_USE,
                 ..Default::default()
             };
             unsafe {
@@ -182,31 +232,14 @@ impl RippleView {
                 ..Default::default()
             };
             unsafe {
-                self.context.core.device.cmd_begin_render_pass(self.command_buffers[i], &render_pass_begin_info, vk::SubpassContents::INLINE)
-            };
-            let viewport = vk::Viewport {
-                x: 0.0,
-                y: 0.0,
-                width: self.swapchain.swapchain_extent().width as f32,
-                height: self.swapchain.swapchain_extent().height as f32,
-                ..Default::default()
-            };
-            let scissor = vk::Rect2D {
-                offset: vk::Offset2D {
-                    x: 0,
-                    y: 0 
-                },
-                extent: self.swapchain.swapchain_extent()
+                self.context.core.device.cmd_begin_render_pass(self.command_buffers[i], &render_pass_begin_info, vk::SubpassContents::SECONDARY_COMMAND_BUFFERS);
+                self.context.core.device.cmd_execute_commands(self.command_buffers[i], &[self.ripple_text.read().unwrap().get_secondary_buffer()]);
             };
             unsafe {
-                self.context.core.device.cmd_set_viewport(self.command_buffers[i], 0, &[viewport]);
-                self.context.core.device.cmd_set_scissor(self.command_buffers[i], 0, &[scissor]);
                 self.context.core.device.cmd_end_render_pass(self.command_buffers[i]);
                 self.context.core.device.end_command_buffer(self.command_buffers[i]).expect("Failed to end swapchain command buffers!");
             };
         };
-        self.context.state.write().unwrap().screen_width = self.swapchain.swapchain_extent().width;
-        self.context.state.write().unwrap().screen_height = self.swapchain.swapchain_extent().height;
     }
     pub fn main_loop(&mut self) {
         while !self.window.should_close() {

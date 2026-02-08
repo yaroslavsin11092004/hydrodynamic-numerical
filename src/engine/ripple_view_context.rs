@@ -60,12 +60,12 @@ pub struct RippleViewState {
     pub(crate) screen_height: u32,
     pub(crate) font_size: u32,
     pub(crate) screen_render_pass: vk::RenderPass,
-    pub(crate) command_pool: vk::CommandPool
+    pub(crate) command_pool: vk::CommandPool,
 }
 
 impl RippleViewState {
     pub fn new(screen_width: u32, screen_height: u32, font_size: u32) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(Self { screen_width, screen_height, font_size, screen_render_pass: vk::RenderPass::null(), command_pool: vk::CommandPool::null() }))
+        Arc::new(RwLock::new(Self { screen_width, screen_height, font_size, screen_render_pass: vk::RenderPass::null(), command_pool: vk::CommandPool::null()}))
     }
     pub fn create_render_pass(&mut self, device: &ash::Device, sch_format: vk::Format) {
         let color_attachment = vk::AttachmentDescription {
